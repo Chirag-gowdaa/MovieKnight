@@ -8,7 +8,14 @@ import { StarIcon, CalendarIcon } from '@heroicons/react/24/outline';
 
 export default function MovieCard({ movie, onClick }) {
   const [isHovered, setIsHovered] = useState(false);
-  const posterUrl = movie.Poster !== 'N/A' ? movie.Poster : '/no-poster.png';
+  
+  // Ensure we have valid poster URL
+  const posterUrl = movie?.Poster && movie.Poster !== 'N/A' 
+    ? movie.Poster 
+    : '/no-poster.png';
+  
+  // Ensure we have valid title
+  const title = movie?.Title || 'Unknown Movie';
 
   return (
     <motion.div
@@ -21,10 +28,11 @@ export default function MovieCard({ movie, onClick }) {
       <div className="relative aspect-[2/3] w-full">
         <Image
           src={posterUrl}
-          alt={movie.Title}
+          alt={title}
           fill
           className="object-cover"
           sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+          priority={false}
         />
         {isHovered && (
           <motion.div 
@@ -39,7 +47,7 @@ export default function MovieCard({ movie, onClick }) {
         )}
       </div>
       <div className="p-4">
-        <h3 className="font-semibold text-gray-100 line-clamp-1">{movie.Title}</h3>
+        <h3 className="font-semibold text-gray-100 line-clamp-1">{title}</h3>
         <div className="flex items-center mt-1 text-sm text-gray-300">
           {movie.imdbRating && (
             <div className="flex items-center mr-4">

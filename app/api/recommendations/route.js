@@ -13,8 +13,32 @@ const VALID_GENRES = [
 ];
 
 /**
- * Get movie recommendations based on genre and year
- * @route GET /api/recommendations?genre={genre}&year={year}&page={page}
+ * Parse year range string (e.g., "2020-2024" or "2020")
+ */
+function parseYearRange(yearStr) {
+  if (!yearStr) return null;
+  
+  if (yearStr.includes('-')) {
+    const [start, end] = yearStr.split('-').map(y => parseInt(y, 10));
+    return { start, end };
+  }
+  
+  const year = parseInt(yearStr, 10);
+  return { start: year, end: year };
+}
+
+/**
+ * Check if movie year falls within range
+ */
+function isYearInRange(movieYear, range) {
+  if (!range) return true;
+  const year = parseInt(movieYear, 10);
+  return year >= range.start && year <= range.end;
+}
+
+/**
+ * Get movie recommendations based on genre and year with enhanced filtering
+ * @route GET /api/recommendations?genre={genre}&year={year}&page={page}&sortBy={sortBy}
  * @param {Request} req - The incoming request object
  * @returns {Promise<NextResponse>} The recommended movies
  */
@@ -24,6 +48,7 @@ export async function GET(req) {
     const genre = searchParams.get('genre')?.toLowerCase();
     const year = searchParams.get('year');
     const page = parseInt(searchParams.get('page') || '1', 10);
+    const sortBy = searchParams.get('sortBy') || 'relevance'; // relevance, year, title
 
     // Input validation
     if (!genre) {
@@ -36,8 +61,8 @@ export async function GET(req) {
       );
     }
 
-    if (year && !/^\d{4}$/.test(year)) {
-      throw new BadRequestError('Year must be a valid 4-digit year');
+    if (year && !/^[\d\-]+$/.test(year)) {
+      throw new BadRequestError('Year must be a valid year or year range (e.g., 2020-2024)');
     }
 
     if (page < 1) {
@@ -45,7 +70,7 @@ export async function GET(req) {
     }
 
     // Construct cache key
-    const cacheKey = `recommendations:${genre}:${year || 'any'}:${page}`;
+    const cacheKey = `recommendations:${genre}:${year || 'any'}:${page}:${sortBy}`;
     const cachedData = cache.get(cacheKey);
     
     // Return cached response if available and not expired
@@ -57,13 +82,15 @@ export async function GET(req) {
       });
     }
 
-    // Build OMDb API URL
+    // Parse year range
+    const yearRange = parseYearRange(year);
+
+    // Build OMDb API URL - search for genre keyword
     const params = new URLSearchParams({
       apikey: process.env.NEXT_PUBLIC_OMDB_API_KEY,
       s: genre,
       type: 'movie',
       page: page.toString(),
-      ...(year && { y: year }),
     });
 
     const apiUrl = `https://www.omdbapi.com/?${params.toString()}`;
@@ -82,19 +109,29 @@ export async function GET(req) {
       throw new Error(data.Error || 'Failed to fetch recommendations');
     }
 
-    // Filter out movies without poster and with missing data
-    const results = (data.Search || [])
+    // Filter and process results
+    let results = (data.Search || [])
       .filter(movie => 
         movie.Poster && movie.Poster !== 'N/A' && 
-        movie.Year && movie.imdbID
+        movie.Year && movie.imdbID &&
+        isYearInRange(movie.Year, yearRange)
       )
       .map(movie => ({
         id: movie.imdbID,
+        imdbID: movie.imdbID,
         title: movie.Title,
         year: movie.Year,
         type: movie.Type,
         poster: movie.Poster,
       }));
+
+    // Sort results based on sortBy parameter
+    if (sortBy === 'year') {
+      results.sort((a, b) => parseInt(b.year) - parseInt(a.year));
+    } else if (sortBy === 'title') {
+      results.sort((a, b) => a.title.localeCompare(b.title));
+    }
+    // 'relevance' is default (OMDb order)
 
     // Cache the successful response
     const cacheValue = {
@@ -103,6 +140,9 @@ export async function GET(req) {
         totalResults: parseInt(data.totalResults, 10) || 0,
         page,
         hasMore: (data.totalResults || 0) > page * 10,
+        genre,
+        yearRange: year || null,
+        sortBy,
       },
       timestamp: Date.now(),
     };

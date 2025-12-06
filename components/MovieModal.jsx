@@ -5,10 +5,14 @@ import { XMarkIcon, StarIcon, ClockIcon, FilmIcon, CalendarIcon } from '@heroico
 import Image from 'next/image';
 import { useEffect } from 'react';
 
-export default function MovieModal({ movie, isOpen, onClose }) {
+export default function MovieModal({ movie, isOpen, onClose, similarMovies = [], onSimilarMovieSelect }) {
   if (!isOpen || !movie) return null;
 
-  const backdropUrl = movie.Poster !== 'N/A' ? movie.Poster : '/no-poster.png';
+  const backdropUrl = movie?.Poster && movie.Poster !== 'N/A' 
+    ? movie.Poster 
+    : '/no-poster.png';
+  
+  const movieTitle = movie?.Title || 'Unknown Movie';
 
   // Close on Escape
   useEffect(() => {
@@ -62,15 +66,15 @@ export default function MovieModal({ movie, isOpen, onClose }) {
               <div className="relative h-64 md:h-96 w-full">
                 <Image
                   src={backdropUrl}
-                  alt={movie.Title}
+                  alt={movieTitle}
                   fill
                   className="object-cover rounded-t-lg"
-                  priority
+                  priority={false}
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/40 to-transparent rounded-t-lg" />
                 <div className="absolute bottom-0 left-0 p-6">
                   <div className="bg-black/70 backdrop-blur-sm text-white rounded-lg p-4 shadow-lg max-w-[95%]">
-                    <h2 className="text-3xl font-bold mb-2">{movie.Title}</h2>
+                    <h2 className="text-3xl font-bold mb-2">{movieTitle}</h2>
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
                       <span className="flex items-center">
                         <CalendarIcon className="h-4 w-4 mr-1" />
@@ -136,6 +140,48 @@ export default function MovieModal({ movie, isOpen, onClose }) {
                           <div className="text-2xl font-bold text-amber-400">{rating.Value}</div>
                         </div>
                       ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Similar Movies Section */}
+                {similarMovies && similarMovies.length > 0 && (
+                  <div className="mt-8 pt-8 border-t border-white/10">
+                    <h4 className="text-lg font-semibold text-gray-100 mb-4">You Might Also Like</h4>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                      {similarMovies.slice(0, 6).map((similarMovie) => {
+                        const similarPoster = similarMovie?.poster && similarMovie.poster !== 'N/A'
+                          ? similarMovie.poster
+                          : '/no-poster.png';
+                        const similarTitle = similarMovie?.title || 'Unknown Movie';
+                        
+                        return (
+                        <motion.div
+                          key={similarMovie.id || similarMovie.imdbID}
+                          whileHover={{ scale: 1.05 }}
+                          onClick={() => {
+                            onSimilarMovieSelect?.(similarMovie);
+                          }}
+                          className="cursor-pointer group"
+                        >
+                          <div className="relative h-32 sm:h-40 rounded-lg overflow-hidden bg-neutral-800">
+                            <Image
+                              src={similarPoster}
+                              alt={similarTitle}
+                              fill
+                              className="object-cover group-hover:scale-110 transition-transform duration-300"
+                              priority={false}
+                            />
+                            <div className="absolute inset-0 bg-black/40 group-hover:bg-black/20 transition-colors" />
+                            <div className="absolute inset-0 flex items-end p-2">
+                              <div className="text-white text-xs font-semibold line-clamp-2">
+                                {similarTitle}
+                              </div>
+                            </div>
+                          </div>
+                        </motion.div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}

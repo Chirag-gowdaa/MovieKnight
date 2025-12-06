@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import SearchBar from '@/components/SearchBar';
 import RecommendationsGrid from '@/components/RecommendationsGrid';
 import MovieModal from '@/components/MovieModal';
-import { searchMovies, getMovieById } from '@/lib/api';
+import { searchMovies, getMovieById, getTrendingMovies, getSimilarMovies } from '@/lib/api';
 import { 
   FilmIcon, 
   StarIcon, 
@@ -16,7 +16,9 @@ import {
   ClockIcon,
   GlobeAltIcon,
   UserGroupIcon,
-  MagnifyingGlassIcon as SearchIcon
+  MagnifyingGlassIcon as SearchIcon,
+  ArrowTrendingUpIcon,
+  CheckCircleIcon
 } from '@heroicons/react/24/outline';
 
 // Curated movie collections
@@ -151,6 +153,12 @@ export default function RecommendationsPage() {
   const [isSearching, setIsSearching] = useState(false);
   const [movieDetails, setMovieDetails] = useState({});
   const [loading, setLoading] = useState(false);
+  const [trendingMovies, setTrendingMovies] = useState([]);
+  const [similarMovies, setSimilarMovies] = useState([]);
+  const [sortBy, setSortBy] = useState('relevance');
+  const [showSimilar, setShowSimilar] = useState(false);
+  const [apiRecommendations, setApiRecommendations] = useState([]);
+  const [apiLoading, setApiLoading] = useState(false);
 
   // Get user preferences from URL params
   const genres = searchParams.get('genres')?.split(',').filter(Boolean) || [];
@@ -181,9 +189,18 @@ export default function RecommendationsPage() {
   // Handle movie selection
   const handleMovieSelect = async (movie) => {
     try {
-      const { movie: details } = await getMovieById(movie.imdbID);
+      const { movie: details } = await getMovieById(movie.imdbID || movie.id);
       setSelectedMovie(details);
       setIsModalOpen(true);
+      
+      // Fetch similar movies
+      try {
+        const { similar } = await getSimilarMovies(movie.imdbID || movie.id, 6);
+        setSimilarMovies(similar);
+        setShowSimilar(true);
+      } catch (error) {
+        console.error('Error fetching similar movies:', error);
+      }
     } catch (error) {
       console.error('Error fetching movie details:', error);
     }
@@ -209,6 +226,50 @@ export default function RecommendationsPage() {
     setLoading(false);
   };
 
+  // Fetch API recommendations based on genres
+  const fetchApiRecommendations = async () => {
+    if (genres.length === 0) return;
+    
+    setApiLoading(true);
+    try {
+      // Fetch recommendations for each selected genre
+      const allRecommendations = [];
+      const seenIds = new Set();
+      
+      for (const genre of genres) {
+        try {
+          const yearParam = years.length > 0 ? years[0] : '';
+          const params = new URLSearchParams({
+            genre: genre.toLowerCase(),
+            ...(yearParam && { year: yearParam }),
+            sortBy: sortBy,
+          });
+          
+          const response = await fetch(`/api/recommendations?${params.toString()}`);
+          const data = await response.json();
+          
+          if (data.success && data.results) {
+            // Add unique movies
+            for (const movie of data.results) {
+              if (!seenIds.has(movie.imdbID)) {
+                allRecommendations.push(movie);
+                seenIds.add(movie.imdbID);
+              }
+            }
+          }
+        } catch (error) {
+          console.error(`Error fetching recommendations for ${genre}:`, error);
+        }
+      }
+      
+      setApiRecommendations(allRecommendations);
+    } catch (error) {
+      console.error('Error fetching API recommendations:', error);
+    } finally {
+      setApiLoading(false);
+    }
+  };
+
   // Load movie details on component mount
   useEffect(() => {
     const allMovies = [
@@ -216,7 +277,25 @@ export default function RecommendationsPage() {
       ...Object.values(FEATURED_SECTIONS).flatMap(section => section.movies)
     ];
     fetchMovieDetails(allMovies);
+    
+    // Load trending movies
+    const loadTrending = async () => {
+      try {
+        const { trending } = await getTrendingMovies(8);
+        setTrendingMovies(trending);
+      } catch (error) {
+        console.error('Error fetching trending movies:', error);
+      }
+    };
+    loadTrending();
   }, []);
+
+  // Fetch API recommendations when genres change
+  useEffect(() => {
+    if (genres.length > 0) {
+      fetchApiRecommendations();
+    }
+  }, [genres, years, sortBy]);
 
   // Filter collections based on user preferences
   const getFilteredCollections = () => {
@@ -290,12 +369,52 @@ export default function RecommendationsPage() {
           )}
         </motion.div>
 
-        {/* Search Bar */}
-        <div className="mb-12">
+        {/* Search Bar and Filters */}
+        <div className="mb-12 space-y-4">
           <SearchBar 
             onSearch={setSearchQuery}
             initialQuery={searchQuery}
           />
+          
+          {/* Sort Options */}
+          {!searchQuery && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex flex-wrap gap-3 justify-center"
+            >
+              <button
+                onClick={() => setSortBy('relevance')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  sortBy === 'relevance'
+                    ? 'bg-amber-500 text-white'
+                    : 'bg-neutral-800 text-gray-300 hover:bg-neutral-700'
+                }`}
+              >
+                Relevance
+              </button>
+              <button
+                onClick={() => setSortBy('year')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  sortBy === 'year'
+                    ? 'bg-amber-500 text-white'
+                    : 'bg-neutral-800 text-gray-300 hover:bg-neutral-700'
+                }`}
+              >
+                Latest First
+              </button>
+              <button
+                onClick={() => setSortBy('title')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  sortBy === 'title'
+                    ? 'bg-amber-500 text-white'
+                    : 'bg-neutral-800 text-gray-300 hover:bg-neutral-700'
+                }`}
+              >
+                A-Z
+              </button>
+            </motion.div>
+          )}
         </div>
 
         {/* Loading State */}
@@ -332,6 +451,69 @@ export default function RecommendationsPage() {
               movies={searchResults} 
               onMovieSelect={handleMovieSelect} 
             />
+          </motion.div>
+        )}
+
+        {/* API Recommendations Section */}
+        {showRecommendations && apiRecommendations.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-16"
+          >
+            <div className="glass-dark rounded-2xl p-8 border border-amber-500/20">
+              <div className="text-center mb-8">
+                <h2 className="text-4xl font-bold text-gray-100 mb-2">
+                  Personalized Recommendations
+                </h2>
+                <p className="text-gray-400 max-w-2xl mx-auto">
+                  Movies based on your selected preferences
+                </p>
+              </div>
+              
+              {apiLoading ? (
+                <div className="flex justify-center items-center py-12">
+                  <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber-500 mx-auto mb-4"></div>
+                    <p className="text-gray-400">Loading recommendations...</p>
+                  </div>
+                </div>
+              ) : (
+                <RecommendationsGrid 
+                  movies={apiRecommendations} 
+                  onMovieSelect={handleMovieSelect} 
+                />
+              )}
+            </div>
+          </motion.div>
+        )}
+
+        {/* Trending Now Section */}
+        {showRecommendations && trendingMovies.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-16"
+          >
+            <div className="glass-dark rounded-2xl p-8 border border-rose-500/20">
+              <div className="text-center mb-8">
+                <div className="flex items-center justify-center gap-2 mb-4">
+                  <ArrowTrendingUpIcon className="h-8 w-8 text-rose-400" />
+                  <span className="text-4xl">🔥</span>
+                </div>
+                <h2 className="text-4xl font-bold text-gray-100 mb-2">
+                  Trending Now
+                </h2>
+                <p className="text-gray-400 max-w-2xl mx-auto">
+                  The hottest movies everyone is watching right now
+                </p>
+              </div>
+              
+              <RecommendationsGrid 
+                movies={trendingMovies} 
+                onMovieSelect={handleMovieSelect} 
+              />
+            </div>
           </motion.div>
         )}
 
@@ -478,7 +660,13 @@ export default function RecommendationsPage() {
       <MovieModal
         movie={selectedMovie}
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => {
+          setIsModalOpen(false);
+          setShowSimilar(false);
+          setSimilarMovies([]);
+        }}
+        similarMovies={showSimilar ? similarMovies : []}
+        onSimilarMovieSelect={handleMovieSelect}
       />
     </div>
   );
