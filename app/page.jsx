@@ -22,7 +22,7 @@ export default function Home() {
   ];
 
   const decades = [
-    { label: "2020s", range: "2020-2024" },
+    { label: "2020s", range: "2020-2025" },
     { label: "2010s", range: "2010-2019" },
     { label: "2000s", range: "2000-2009" },
     { label: "1990s", range: "1990-1999" },

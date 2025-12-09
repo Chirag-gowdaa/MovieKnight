@@ -1,6 +1,7 @@
 import { Inter } from 'next/font/google';
 import './globals.css';
 import Navbar from '@/components/Navbar';
+import ChatBot from '@/components/ChatBot';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -23,6 +24,7 @@ export default function RootLayout({ children }) {
         <div className="min-h-full flex flex-col">
           <Navbar />
           {children}
+          <ChatBot />
         </div>
       </body>
     </html>

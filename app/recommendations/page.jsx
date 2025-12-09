@@ -134,12 +134,12 @@ const FEATURED_SECTIONS = {
     icon: "🎬",
     description: "The hottest movies from recent years",
     movies: [
+      { title: "Dune: Part Two", year: "2024", imdbID: "tt14208870" },
+      { title: "The Brutalist", year: "2023", imdbID: "tt13238346" },
       { title: "Oppenheimer", year: "2023", imdbID: "tt15398776" },
+      { title: "Killers of the Flower Moon", year: "2023", imdbID: "tt10954984" },
       { title: "Barbie", year: "2023", imdbID: "tt1517268" },
-      { title: "Top Gun: Maverick", year: "2022", imdbID: "tt1745960" },
-      { title: "Everything Everywhere All at Once", year: "2022", imdbID: "tt6710474" },
-      { title: "Dune", year: "2021", imdbID: "tt1160419" },
-      { title: "No Time to Die", year: "2021", imdbID: "tt2382320" }
+      { title: "Top Gun: Maverick", year: "2022", imdbID: "tt1745960" }
     ]
   }
 };
@@ -168,6 +168,7 @@ export default function RecommendationsPage() {
 
   // Handle search functionality
   const handleSearch = async (query) => {
+    setSearchQuery(query);
     if (!query) {
       setSearchResults([]);
       setIsSearching(false);
@@ -232,39 +233,60 @@ export default function RecommendationsPage() {
     
     setApiLoading(true);
     try {
-      // Fetch recommendations for each selected genre
+      const typeParam = types.includes('Both')
+        ? 'both'
+        : (types.includes('Series') && !types.includes('Movie')) ? 'series' : 'movie';
+      const languageParam = languages.map(lang => lang.toLowerCase()).join(',');
+
+      // Fetch recommendations for all genres in parallel
+      const yearParam = years.length > 0 ? years[0] : '';
+      
+      const requests = genres.map(genre => {
+        const params = new URLSearchParams({
+          genre: genre.toLowerCase(),
+          ...(yearParam && { year: yearParam }),
+          ...(typeParam && { type: typeParam }),
+          ...(languageParam && { languages: languageParam }),
+          sortBy: sortBy,
+        });
+        
+        return fetch(`/api/recommendations?${params.toString()}`)
+          .then(res => res.json())
+          .catch(error => {
+            console.error(`Error fetching recommendations for ${genre}:`, error);
+            return { success: false, results: [] };
+          });
+      });
+      
+      // Wait for all requests to complete
+      const responses = await Promise.all(requests);
+      
+      // Combine results and remove duplicates
       const allRecommendations = [];
       const seenIds = new Set();
       
-      for (const genre of genres) {
-        try {
-          const yearParam = years.length > 0 ? years[0] : '';
-          const params = new URLSearchParams({
-            genre: genre.toLowerCase(),
-            ...(yearParam && { year: yearParam }),
-            sortBy: sortBy,
-          });
-          
-          const response = await fetch(`/api/recommendations?${params.toString()}`);
-          const data = await response.json();
-          
-          if (data.success && data.results) {
-            // Add unique movies
-            for (const movie of data.results) {
-              if (!seenIds.has(movie.imdbID)) {
-                allRecommendations.push(movie);
-                seenIds.add(movie.imdbID);
-              }
+      for (const data of responses) {
+        if (data.success && data.results) {
+          for (const movie of data.results) {
+            if (!seenIds.has(movie.imdbID)) {
+              allRecommendations.push(movie);
+              seenIds.add(movie.imdbID);
             }
           }
-        } catch (error) {
-          console.error(`Error fetching recommendations for ${genre}:`, error);
         }
       }
       
-      setApiRecommendations(allRecommendations);
+      const sortedRecommendations = [...allRecommendations];
+      if (sortBy === 'year') {
+        sortedRecommendations.sort((a, b) => parseInt(b.year || '0') - parseInt(a.year || '0'));
+      } else if (sortBy === 'title') {
+        sortedRecommendations.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+      }
+
+      setApiRecommendations(sortedRecommendations);
     } catch (error) {
       console.error('Error fetching API recommendations:', error);
+      setApiRecommendations([]);
     } finally {
       setApiLoading(false);
     }
@@ -295,7 +317,7 @@ export default function RecommendationsPage() {
     if (genres.length > 0) {
       fetchApiRecommendations();
     }
-  }, [genres, years, sortBy]);
+  }, [genres, years, sortBy, types, languages]);
 
   // Filter collections based on user preferences
   const getFilteredCollections = () => {
@@ -372,7 +394,7 @@ export default function RecommendationsPage() {
         {/* Search Bar and Filters */}
         <div className="mb-12 space-y-4">
           <SearchBar 
-            onSearch={setSearchQuery}
+            onSearch={handleSearch}
             initialQuery={searchQuery}
           />
           
@@ -455,7 +477,7 @@ export default function RecommendationsPage() {
         )}
 
         {/* API Recommendations Section */}
-        {showRecommendations && apiRecommendations.length > 0 && (
+        {showRecommendations && (genres.length > 0) && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -478,11 +500,16 @@ export default function RecommendationsPage() {
                     <p className="text-gray-400">Loading recommendations...</p>
                   </div>
                 </div>
-              ) : (
+              ) : apiRecommendations.length > 0 ? (
                 <RecommendationsGrid 
                   movies={apiRecommendations} 
                   onMovieSelect={handleMovieSelect} 
                 />
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-gray-400 mb-4">No recommendations found for your preferences.</p>
+                  <p className="text-sm text-gray-500">Try adjusting your filters or check out our curated collections below.</p>
+                </div>
               )}
             </div>
           </motion.div>
