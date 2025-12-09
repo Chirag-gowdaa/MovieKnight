@@ -73,7 +73,9 @@ export default function ChatBot() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to get response");
+        // Show the actual error message from the API
+        const errorMessage = data.error || data.message || "Failed to get response";
+        throw new Error(errorMessage);
       }
 
       const botResponse = {
@@ -87,12 +89,27 @@ export default function ChatBot() {
     } catch (error) {
       console.error("Chat error:", error);
       
-      // Fallback response if API fails
+      // More specific error messages
+      let errorText = "I'm having trouble connecting right now. Please try again in a moment.";
+      
+      if (error.message) {
+        if (error.message.includes("API token") || error.message.includes("HF_TOKEN") || error.message.includes("not configured")) {
+          errorText = "The AI assistant is not configured. Please add your Hugging Face API token (HF_TOKEN) to your Vercel environment variables.";
+        } else if (error.message.includes("Rate limit") || error.message.includes("429")) {
+          errorText = "Rate limit exceeded. Please wait a moment and try again.";
+        } else if (error.message.includes("503") || error.message.includes("unavailable")) {
+          errorText = "The AI service is temporarily unavailable. Please try again in a few seconds.";
+        } else if (error.message.includes("401") || error.message.includes("Unauthorized")) {
+          errorText = "Authentication failed. Please check your Hugging Face API token.";
+        } else {
+          // Show the actual error message for debugging
+          errorText = `Error: ${error.message}`;
+        }
+      }
+      
       const botResponse = {
         id: messages.length + 2,
-        text: error.message.includes("API key") 
-          ? "The AI assistant is not configured. Please add your Hugging Face API key to enable AI responses."
-          : "I'm having trouble connecting right now. Please try again in a moment.",
+        text: errorText,
         sender: "bot",
         timestamp: new Date(),
       };
@@ -159,11 +176,26 @@ export default function ChatBot() {
     } catch (error) {
       console.error("Chat error:", error);
       
+      // More specific error messages
+      let errorText = "I'm having trouble connecting right now. Please try again in a moment.";
+      
+      if (error.message) {
+        if (error.message.includes("API token") || error.message.includes("HF_TOKEN") || error.message.includes("not configured")) {
+          errorText = "The AI assistant is not configured. Please add your Hugging Face API token (HF_TOKEN) to your Vercel environment variables.";
+        } else if (error.message.includes("Rate limit") || error.message.includes("429")) {
+          errorText = "Rate limit exceeded. Please wait a moment and try again.";
+        } else if (error.message.includes("503") || error.message.includes("unavailable")) {
+          errorText = "The AI service is temporarily unavailable. Please try again in a few seconds.";
+        } else if (error.message.includes("401") || error.message.includes("Unauthorized")) {
+          errorText = "Authentication failed. Please check your Hugging Face API token.";
+        } else {
+          errorText = `Error: ${error.message}`;
+        }
+      }
+      
       const botResponse = {
         id: messages.length + 2,
-        text: error.message.includes("API key")
-          ? "The AI assistant is not configured. Please add your Hugging Face API key to enable AI responses."
-          : "I'm having trouble connecting right now. Please try again in a moment.",
+        text: errorText,
         sender: "bot",
         timestamp: new Date(),
       };

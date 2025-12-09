@@ -131,10 +131,20 @@ export async function POST(req) {
     });
   } catch (error) {
     console.error('Chat API error:', error);
+    
+    // Provide more specific error messages
+    let errorMessage = 'Failed to get AI response';
+    
+    if (error.message) {
+      errorMessage = error.message;
+    } else if (error instanceof TypeError && error.message.includes('fetch')) {
+      errorMessage = 'Network error: Unable to connect to Hugging Face API. Please check your internet connection.';
+    }
+    
     return NextResponse.json(
       { 
-        error: 'Failed to get AI response',
-        message: error.message 
+        error: errorMessage,
+        message: error.message || 'Unknown error occurred'
       },
       { status: 500 }
     );
